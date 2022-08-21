@@ -26,7 +26,7 @@ test_get_queue:
 	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/help_queue"
 
 build_docker:
-	docker build -t algo3_backend .
+	docker build -t algo3_backend . --no-cache
 
 run_docker:
 	docker run --rm -p ${FROM}:80 algo3_backend -d
