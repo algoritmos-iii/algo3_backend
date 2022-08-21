@@ -29,4 +29,4 @@ build_docker:
 	docker build -t algo3_backend . --no-cache
 
 run_docker:
-	docker run --rm -p ${FROM}:80 algo3_backend -d
+	docker run --rm -p ${FROM}:80 -d algo3_backend
