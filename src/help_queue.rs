@@ -5,9 +5,12 @@ use clap::__macro_refs::once_cell::race::OnceBox;
 use indexmap::IndexMap;
 use std::sync::{Arc, RwLock};
 
+/// Shorthand for the group number.
 type Group = u16;
+/// Shorthand for discord's voice channel id.
 type VoiceChannel = u64;
 
+/// The help queue.
 pub struct HelpQueue {
     queue: RwLock<IndexMap<Group, (VoiceChannel, usize)>>,
     server: OnceBox<WebServer>,
@@ -32,6 +35,7 @@ impl HelpQueue {
         Ok(help_queue)
     }
 
+    /// Pushes a requester to the help queue.
     pub async fn enqueue(&self, group: Group, voice_channel: VoiceChannel) -> Result<()> {
         println!("Enqueueing group {}", group);
         let last_position = match self.len() {
@@ -47,6 +51,7 @@ impl HelpQueue {
         }
     }
 
+    /// Returns the next group in the help queue.
     pub async fn next(&self, helper: String) -> Result<(Group, VoiceChannel)> {
         let next = match self.queue.read() {
             Ok(queue) => {
@@ -65,12 +70,14 @@ impl HelpQueue {
         // TODO: Log help.
     }
 
+    /// Removes the dismisser from the help queue.
     pub async fn dismiss(&self, dismisser: Group) -> Result<(Group, VoiceChannel)> {
         println!("Dismissing group {} help request", dismisser);
         self.remove(dismisser).await
         // TODO: Log dismissal.
     }
 
+    /// Clears the help queue.
     pub async fn clear(&self) -> Result<()> {
         match self.queue.write() {
             Ok(mut queue) => queue.clear(),
@@ -79,6 +86,7 @@ impl HelpQueue {
         Ok(())
     }
 
+    /// Returns the length of the help queue.
     pub fn len(&self) -> Result<usize> {
         match self.queue.read() {
             Ok(queue) => Ok(queue.len()),
@@ -86,6 +94,7 @@ impl HelpQueue {
         }
     }
 
+    /// Returns whether the queue is empty or not.
     pub fn is_empty(&self) -> Result<bool> {
         match self.queue.read() {
             Ok(queue) => Ok(queue.is_empty()),
@@ -93,6 +102,7 @@ impl HelpQueue {
         }
     }
 
+    /// Returns the help queue in order.
     pub fn sorted(&self) -> Result<impl Iterator<Item = Group>> {
         match self.queue.read() {
             Ok(queue) => {
@@ -106,6 +116,7 @@ impl HelpQueue {
         }
     }
     
+    /// Removes a group from the help queue.
     async fn remove(&self, group: Group) -> Result<(Group, VoiceChannel)> {
         println!("Removing group {}", group);
         match self.queue.write().unwrap().remove(&group) {
@@ -115,7 +126,7 @@ impl HelpQueue {
     }
 }
 
-// TODO: Resolver 'Cannot start a runtime from within a runtime. This happens 
+// TODO: Solve 'Cannot start a runtime from within a runtime. This happens 
 // because a function (like `block_on`) attempted to block the current thread 
 // while the thread is being used to drive asynchronous tasks.'
 #[cfg(test)]
