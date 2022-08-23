@@ -22,7 +22,7 @@ La directiva de arriba admite las siguientes opciones:
 - `DOMAIN`: el dominio en el que se alojará el backend. Es `http://127.0.0.1` por defecto (en un futuro `https`).
 - `PORT`: el puerto en el que el backend escuchará requests. Es `8080` por defecto.
 
-## Pruebas
+## Para probar
 
 El `Makefile` dispone de las siguientes directivas para jugar un poco con la API:
 
