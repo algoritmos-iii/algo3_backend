@@ -1,4 +1,4 @@
-use algo3_backend::{web_server::ServerArguments, help_queue::HelpQueue};
+use algo3_backend::web_server::{ServerArguments, WebServer};
 
 use clap::Parser;
 
