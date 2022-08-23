@@ -121,16 +121,16 @@ mod help_queue_tests {
     use super::*;
 
     #[tokio::test]
-    async fn test01() {
-        let queue = HelpQueue::new(ServerArguments::default()).expect("Error creating the help queue");
+    async fn test01_help_queue_should_be_empty_when_created() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
 
         assert!(queue.is_empty().is_ok());
         assert!(queue.is_empty().unwrap());
     }
 
     #[tokio::test]
-    async fn test02() {
-        let queue = HelpQueue::new(ServerArguments::default()).expect("Error creating the help queue");
+    async fn test02_help_queue_should_not_be_empty_after_enqueueing() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
 
         queue.enqueue(1, 887022804183175188).await.expect("Error creating the help queue");
 
@@ -141,21 +141,62 @@ mod help_queue_tests {
     }
 
     #[tokio::test]
-    async fn test03() {
-        let queue = HelpQueue::new(ServerArguments::default()).expect("Error creating the help queue");
+    async fn test03_next_in_queue_should_be_the_last_enqueued() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
         queue.enqueue(1, 887022804183175188).await.expect("Error enqueueing help");
 
         let expected_result = queue.next("Ivan".to_string()).await;
 
         if let Ok((group, voice_channel)) = expected_result {
+            assert_eq!(queue.len().unwrap(), 0);
             assert_eq!(group,1);
             assert_eq!(voice_channel, 887022804183175188);
         } 
     }
 
     #[tokio::test]
-    async fn test04() {
-        let queue = HelpQueue::new(ServerArguments::default()).expect("Error creating the help queue");
+    async fn test04_more_than_one_group_can_request_for_help() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
+        queue.enqueue(1, 887022804183175188).await.expect("Error enqueueing help");
+        queue.enqueue(2, 887022804183175189).await.expect("Error enqueueing help");
+
+        assert_eq!(queue.len().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn test05_queue_behaves_fifo() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
+        queue.enqueue(1, 887022804183175188).await.expect("Error enqueueing help");
+        queue.enqueue(2, 887022804183175189).await.expect("Error enqueueing help");
+
+        let expected_result = queue.next("Ivan".to_string()).await;
+        let other_expected_result = queue.next("Ivan".to_string()).await;
+
+        assert_eq!(queue.len().unwrap(), 0);
+        if let Ok((group, voice_channel)) = expected_result {
+            assert_eq!(group,1);
+            assert_eq!(voice_channel, 887022804183175188);
+        }
+        if let Ok((group, voice_channel)) = other_expected_result {
+            assert_eq!(group,2);
+            assert_eq!(voice_channel, 887022804183175189);
+        } 
+    }
+
+    #[tokio::test]
+    async fn test06_cannot_enqueue_the_same_group_twice() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
+        queue.enqueue(1, 887022804183175188).await.expect("Error enqueueing help");
+        
+        let expected_result = queue.enqueue(1, 887022804183175189).await;
+
+        assert_eq!(queue.len().unwrap(), 1);
+        assert!(expected_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test07_there_is_no_next_in_an_empty_queue() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
 
         let expected_result = queue.next("Ivan".to_string()).await;
 
@@ -163,13 +204,48 @@ mod help_queue_tests {
     }
 
     #[tokio::test]
-    async fn test05() {
-        let queue = HelpQueue::new(ServerArguments::default()).expect("Error creating the help queue");
+    async fn test08_queue_is_empty_after_clearing() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
+        queue.enqueue(1, 887022804183175188).await.expect("Error enqueueing help");
 
         let expected_result = queue.clear().await;
 
+        assert_eq!(queue.len().unwrap(), 0);
         assert!(expected_result.is_ok());
-        assert!(queue.is_empty().is_ok());
         assert!(queue.is_empty().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test09_requesters_can_dismiss_their_request() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
+        queue.enqueue(1, 887022804183175188).await.expect("Error enqueueing help");
+
+        let expected_result = queue.dismiss(1).await;
+
+        assert_eq!(queue.len().unwrap(), 0);
+        assert!(expected_result.is_ok());
+        assert_eq!(expected_result.unwrap(), (1, 887022804183175188));
+    }
+
+    #[tokio::test]
+    async fn test10_requesters_cannot_dismiss_if_they_did_not_request_for_help() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
+
+        let expected_result = queue.dismiss(2).await;
+
+        assert!(expected_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test11_groups_that_requested_for_help_can_be_retrieved_sorted() {
+        let queue = HelpQueue::new().expect("Error creating the help queue");
+        queue.enqueue(1, 887022804183175188).await.expect("Error enqueueing help");
+        queue.enqueue(2, 887022804183175189).await.expect("Error enqueueing help");
+        queue.enqueue(3, 887022804183175190).await.expect("Error enqueueing help");
+
+        let expected_result = queue.sorted();
+
+        assert!(expected_result.is_ok());
+        assert_eq!(expected_result.unwrap().collect::<Vec<u16>>(), vec![1, 2, 3]);
     }
 }
