@@ -1,0 +1,4 @@
+[algo3_backend]
+[report]
+output-dir = "target/tarpaulin"
+out = ["Html", "Xml"]
