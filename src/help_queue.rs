@@ -1,7 +1,4 @@
-use crate::web_server::{WebServer, ServerArguments};
-
-use anyhow::{Result, bail, anyhow};
-use clap::__macro_refs::once_cell::race::OnceBox;
+use anyhow::{Result, bail};
 use indexmap::IndexMap;
 use std::sync::{Arc, RwLock};
 
@@ -11,28 +8,18 @@ type Group = u16;
 type VoiceChannel = u64;
 
 /// The help queue.
+#[derive(Debug)]
 pub struct HelpQueue {
     queue: RwLock<IndexMap<Group, (VoiceChannel, usize)>>,
-    server: OnceBox<WebServer>,
     // TODO: Implement logger
     // logger
 }
 
 impl HelpQueue {
-    pub fn new(args: ServerArguments) -> Result<Arc<Self>> {
-        let help_queue = Arc::new(Self {
+    pub fn new() -> Result<Arc<Self>> {
+        Ok(Arc::new(Self {
             queue: RwLock::new(IndexMap::new()),
-            server: OnceBox::new(),
-        });
-
-        let server = WebServer::start(help_queue.clone(), args)?;
-
-        help_queue
-            .server
-            .set(Box::new(server))
-            .map_err(|_| anyhow!("Failed to save the server"))?;
-
-        Ok(help_queue)
+        }))
     }
 
     /// Pushes a requester to the help queue.

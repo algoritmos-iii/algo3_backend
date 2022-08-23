@@ -1,6 +1,6 @@
 use crate::help_queue::HelpQueue;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
@@ -80,27 +80,35 @@ fn with<T: Clone + Send>(item: T) -> impl Filter<Extract = (T,), Error = std::co
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct WebServer {
+    help_queue: Arc<HelpQueue>,
     runtime: tokio::runtime::Runtime,
     args: ServerArguments,
 }
 
 impl WebServer {
     /// Initializes a new instance of the server.
-    pub fn start(help_queue: Arc<HelpQueue>, args: ServerArguments) -> Result<Self> {
+    pub fn start(args: ServerArguments) -> Result<Self> {
         // Initialize a runtime.
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .thread_stack_size(8 * 1024 * 1024)
             .build()?;
+        
+        let help_queue = match HelpQueue::new() {
+            Ok(help_queue) => help_queue,
+            Err(error) => bail!(error.to_string())
+        };
 
         let serve_args = args.clone();
+        let queue = help_queue.clone();
         // Initialize the server.
         runtime.block_on(async move {
-            let _ = Self::start_server(help_queue.clone(), serve_args).await;
+            let _ = Self::start_server(queue, serve_args).await;
         });
 
 
         Ok(Self {
+            help_queue,
             runtime,
             args,
         })
