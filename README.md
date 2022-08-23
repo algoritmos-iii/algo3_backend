@@ -1,5 +1,15 @@
 # algo3_backend
 
+## Prerrequisitos 
+
+Debes tener Rust instalado. Para instalarlo ejecutá los siguientes comandos.
+
+```bash
+curl https://sh.rustup.rs -sSf | sh -s -- -y
+
+source "$HOME/.cargo/env"
+```
+
 ## Build and Run
 
 Ejecutar el siguiente comando compilará y ejecutará el binario que estará escuchando requests en el puerto `8080` en `localhost` por default.
