@@ -6,6 +6,9 @@ HELPER?=Ayudante
 run:
 	cargo run --release -- --port=${PORT}
 
+test:
+	cargo test
+
 test_enqueue_help:
 	curl --location --request POST "${DOMAIN}:${PORT}/api/discord/v1/enqueue_help" -H "Content-Type: application/json" -d '{"group": ${GROUP}, "voice_channel": 887022804183175188}'
 
