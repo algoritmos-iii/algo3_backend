@@ -40,6 +40,14 @@ Todas las directivas de arriba tienen como opciones opcionales `DOMAIN` y `PORT`
 - `test_get_next` admite opcionalmente la opción `HELPER` para indicar el ayudante que brinda la ayuda. Por defecto es `Ayudante`.
 - `test_dismiss_help` admite opcionalmente la opción `GROUP` para indicar el grupo que desestima la ayuda. Por defecto es `0`.
 
+## Para correr los tests
+
+Para correr la suite de tests corré el siguiente comando en consola:
+
+```bash
+make test
+```
+
 ## Convenciones de código
 
 1. Las dependencias deben estar ordenadas alfabeticamente por tipo de dependencia:
