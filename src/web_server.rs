@@ -46,9 +46,9 @@ pub enum HelpQueueRequest {
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct ServerArguments {
-    #[clap(short, long, value_parser, default_value = "http://127.0.0.1")]
+    #[clap(short, long, value_parser, default_value = "http://0.0.0.0")]
     domain: String,
-    #[clap(short, long, value_parser, default_value_t = 8080)]
+    #[clap(short, long, value_parser, default_value_t = 80)]
     port: u16,
 }
 
@@ -64,8 +64,8 @@ impl Clone for ServerArguments {
 impl Default for ServerArguments {
     fn default() -> Self {
         Self {
-            domain: "http://127.0.0.1".to_string(),
-            port: 8080,
+            domain: "http://0.0.0.0".to_string(),
+            port: 80,
         }
     }
 }
@@ -120,7 +120,7 @@ impl WebServer {
         tokio::spawn(async move {
             // Start the server.
             println!("\n🌐 Server is running at {}:{}\n", args.domain, args.port);
-            warp::serve(routes).run(([127, 0, 0, 1], args.port)).await;
+            warp::serve(routes).run(([0, 0, 0, 0], args.port)).await;
         })
     }
 
