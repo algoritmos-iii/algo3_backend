@@ -80,7 +80,7 @@ jobs:
 
   fmt:
     docker:
-      - image: cimg/rust:1.58.1
+      - image: cimg/rust:1.63.0
     resource_class: xlarge
     steps:
       - checkout
@@ -96,7 +96,7 @@ jobs:
 
   clippy:
     docker:
-      - image: cimg/rust:1.58.1
+      - image: cimg/rust:1.63.0
     resource_class: xlarge
     steps:
       - checkout
