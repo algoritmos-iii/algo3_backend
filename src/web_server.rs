@@ -1,8 +1,9 @@
-use crate::help_queue::HelpQueue;
+use crate::{help_queue::HelpQueue, google_services::{SpreadsheetService, GoogleService, ServiceType}};
 
 use anyhow::{bail, Result};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use warp::{hyper::StatusCode, reject, reply, Filter, Rejection, Reply};
@@ -13,10 +14,23 @@ struct Requester {
     voice_channel: u64,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Student {
+    pub id: u32,
+    pub email: String,
+}
+
 /// An enum of error handlers for the server.
 #[derive(Debug)]
 enum ServerError {
     Request(String),
+    StudentNotFound,
+    InvalidStudentId,
+    InvalidStudentEmail,
+    InvalidGroup,
+    StudentHasNoGroup,
+    GoogleServiceResponse,
 }
 
 impl reject::Reject for ServerError {}
@@ -50,13 +64,16 @@ pub struct ServerArguments {
     domain: String,
     #[clap(short, long, value_parser, default_value_t = 80)]
     port: u16,
+    #[clap(short, long, value_parser, default_value = "1KmCLO5pJCVI6PWerRRZGLxFTFbX733QaxHonSlxxy8k")]
+    spreadsheet_id: String,
 }
 
 impl Clone for ServerArguments {
     fn clone(&self) -> Self {
-        Self {
-            domain: self.domain.clone(),
+        Self { 
+            domain: self.domain.clone(), 
             port: self.port,
+            spreadsheet_id: self.spreadsheet_id.clone(),
         }
     }
 }
@@ -66,6 +83,7 @@ impl Default for ServerArguments {
         Self {
             domain: "http://0.0.0.0".to_string(),
             port: 80,
+            spreadsheet_id: "1KmCLO5pJCVI6PWerRRZGLxFTFbX733QaxHonSlxxy8k".to_string(),
         }
     }
 }
@@ -116,8 +134,16 @@ impl WebServer {
 
     fn start_server(help_queue: Arc<HelpQueue>, args: ServerArguments) -> JoinHandle<()> {
         // Prepare the list of routes.
-        let routes = Self::routes(help_queue);
         tokio::spawn(async move {
+            let spreadsheet_service = SpreadsheetService::new_reading_service_account_key(
+                    ServiceType::Spreadsheet,
+                    "v4",
+                    "./clientsecret.json",
+                    &["https://www.googleapis.com/auth/spreadsheets"],
+                )
+                .await
+                .unwrap();
+            let routes = Self::routes(help_queue, spreadsheet_service, args.clone());
             // Start the server.
             println!("\n🌐 Server is running at {}:{}\n", args.domain, args.port);
             warp::serve(routes).run(([0, 0, 0, 0], args.port)).await;
@@ -126,6 +152,8 @@ impl WebServer {
 
     fn routes(
         help_queue: Arc<HelpQueue>,
+        spreadsheet_service: Arc<SpreadsheetService>,
+        args: ServerArguments,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
         // GET /api/discord/v1/next
         let next = warp::get()
