@@ -1,0 +1,118 @@
+version: 2.1
+commands:
+  setup_environment:
+    description: "Setup testing environment"
+    parameters:
+      cache_key:
+        type: string
+        default: algo3-backend-cache
+    steps:
+      - run: set -e
+      - setup_remote_docker
+      - run:
+          name: Prepare environment and install dependencies
+          command: |
+            export SCCACHE_CACHE_SIZE=200M
+            export WORK_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
+            export SCCACHE_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
+            mkdir -p "$CIRCLE_WORKING_DIRECTORY/.bin"
+            wget https://github.com/mozilla/sccache/releases/download/0.2.13/sccache-0.2.13-x86_64-unknown-linux-musl.tar.gz
+            tar -C "$CIRCLE_WORKING_DIRECTORY/.bin" -xvf sccache-0.2.13-x86_64-unknown-linux-musl.tar.gz
+            mv $CIRCLE_WORKING_DIRECTORY/.bin/sccache-0.2.13-x86_64-unknown-linux-musl/sccache $CIRCLE_WORKING_DIRECTORY/.bin/sccache
+            export PATH="$PATH:$CIRCLE_WORKING_DIRECTORY/.bin"
+            export RUSTC_WRAPPER="sccache"
+            rm -rf "$CIRCLE_WORKING_DIRECTORY/.cargo/registry"
+            sudo apt-get update && sudo apt-get install -y clang llvm-dev llvm pkg-config xz-utils make libssl-dev libssl-dev
+      - restore_cache:
+          keys:
+            - << parameters.cache_key >>
+
+  clear_environment:
+    description: "Clear environment"
+    parameters:
+      cache_key:
+        type: string
+        default: algo3-backend-cache
+    steps:
+      - run: (sccache -s||true)
+      - run: set +e
+      - save_cache:
+          key: << parameters.cache_key >>
+          paths:
+            - .cache/sccache
+            - .cargo
+
+  run_parallel:
+    description: "Build and run tests (in parallel)"
+    parameters:
+      workspace_member:
+        type: string
+    steps:
+      - run:
+          no_output_timeout: 30m
+          command: |
+            cd << parameters.workspace_member >>
+            cargo test -- --list --format terse | sed 's/: test//' > test_names.txt
+            TEST_NAMES=$(circleci tests split test_names.txt)
+            for i in $(echo $TEST_NAMES | sed "s/ / /g")
+            do
+                RUST_MIN_STACK=8388608 cargo test --workspace $i
+            done
+  install_rust_nightly:
+    description: "Install Rust nightly toolchain"
+    steps:
+      - run: rustup toolchain install nightly-x86_64-unknown-linux-gnu
+
+jobs:
+  tests:
+    docker:
+      - image: cimg/rust:1.58.1
+    resource_class: xlarge
+    parallelism: 20
+    steps:
+      - checkout
+      - setup_environment:
+          cache_key: algo3-backend-cache
+      - run_parallel:
+          workspace_member: .
+      - clear_environment:
+          cache_key: algo3-backend-cache
+
+  fmt:
+    docker:
+      - image: cimg/rust:1.58.1
+    resource_class: xlarge
+    steps:
+      - checkout
+      - install_rust_nightly
+      - setup_environment:
+          cache_key: algo3-backend-fmt-cache
+      - run:
+          name: Check style
+          no_output_timeout: 35m
+          command: cargo +nightly fmt --all -- --check
+      - clear_environment:
+          cache_key: algo3-backend-fmt-cache
+
+  clippy:
+    docker:
+      - image: cimg/rust:1.58.1
+    resource_class: xlarge
+    steps:
+      - checkout
+      - install_rust_nightly
+      - setup_environment:
+          cache_key: algo3-backend-clippy-cache
+      - run:
+          name: Check style
+          no_output_timeout: 35m
+          command: cargo +nightly clippy --workspace --all-targets
+      - clear_environment:
+          cache_key: algo3-backend-clippy-cache
+
+workflows:
+  main-workflow:
+    jobs:
+      - tests
+      - fmt
+      - clippy
