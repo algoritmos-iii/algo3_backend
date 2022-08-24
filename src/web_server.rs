@@ -162,12 +162,21 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "help_queue"))
             .and(with(help_queue))
             .and_then(Self::get_help_queue);
+        
+        let is_student = warp::get()
+            .and(warp::path!("api" / "discord" / "v1" / "is_student"))
+            .and(warp::body::content_length_limit(10 * 1024 * 1024))
+            .and(warp::body::json())
+            .and(with(spreadsheet_service.clone()))
+            .and(with(args.spreadsheet_id.clone()))
+            .and_then(Self::is_student);
 
         // Return the list of routes.
         next.or(dismiss_help)
             .or(request_help)
             .or(clear_queue)
             .or(get_help_queue)
+            .or(is_student)
     }
 
     /// Returns the next group in the help queue.
@@ -213,5 +222,33 @@ impl WebServer {
     async fn get_help_queue(help_queue: Arc<HelpQueue>) -> Result<impl Reply, Rejection> {
         let queue: Vec<u16> = help_queue.sorted().or_reject()?.collect();
         Ok(reply::with_status(reply::json(&queue), StatusCode::OK))
+    }
+
+    async fn is_student(
+        student_model: Student,
+        service: Arc<SpreadsheetService>,
+        spreadsheet_id: String,
+    ) -> Result<impl Reply, Rejection> {
+        let student_id = student_model.id;
+        let student_email = student_model.email;
+
+        // TODO: validate student model fields.
+
+        let student_column_range = "B:E";
+        let sheet_id = "Listado";
+    
+        let spreadsheet_values = service
+            .get_values(&spreadsheet_id, sheet_id, student_column_range)
+            .await
+            .or_reject()?;
+    
+        let is_student = spreadsheet_values.values.into_iter().any(|mut row| {
+            row.splice(1..3, vec![]);
+            row.contains(&student_id.to_string()) && row.contains(&student_email)
+        });
+    
+        Ok(reply::with_status(reply::json(&json!(is_student)), StatusCode::OK))
+    
+        // TODO: Update "Está en Discord" column (K).
     }
 }
