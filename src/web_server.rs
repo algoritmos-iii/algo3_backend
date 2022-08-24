@@ -171,12 +171,21 @@ impl WebServer {
             .and(with(args.spreadsheet_id.clone()))
             .and_then(Self::is_student);
 
+        let get_group = warp::get()
+            .and(warp::path!("api" / "discord" / "v1" / "group"))
+            .and(warp::body::content_length_limit(10 * 1024 * 1024))
+            .and(warp::body::json())
+            .and(with(spreadsheet_service))
+            .and(with(args.spreadsheet_id))
+            .and_then(Self::find_group);
+
         // Return the list of routes.
         next.or(dismiss_help)
             .or(request_help)
             .or(clear_queue)
             .or(get_help_queue)
             .or(is_student)
+            .or(get_group)
     }
 
     /// Returns the next group in the help queue.
@@ -251,4 +260,49 @@ impl WebServer {
     
         // TODO: Update "Está en Discord" column (K).
     }
+
+    pub async fn find_group(
+        student_model: Student,
+        service: Arc<SpreadsheetService>,
+        spreadsheet_id: String,
+    ) -> Result<impl Reply, Rejection> {
+        let student_id = student_model.id;
+        let student_email = student_model.email;
+    
+        // TODO: validate student model fields.
+    
+        println!("Finding group of: {student_id} {student_email}");
+    
+        let spreadsheet_values = service
+            .get_values(&spreadsheet_id, "Listado", "B:E")
+            .await
+            .or_reject()?;
+    
+        println!("Spreadsheet retrieved successfully.");
+    
+        let plausible_student = spreadsheet_values
+            .values
+            .into_iter()
+            .map(|mut row| {
+                row.splice(1..2, vec![]);
+                row
+            })
+            .find(|row| row[0] == student_id.to_string() && row[2] == student_email);
+    
+        let student = match plausible_student {
+            Some(student) => student,
+            None => return Err(reject::custom(ServerError::StudentNotFound)),
+        };
+    
+        println!("Student found.");
+    
+        let group = match student[1].parse::<u8>() {
+            Ok(group) => group,
+            Err(_) => return Err(reject::custom(ServerError::StudentHasNoGroup)),
+        };
+    
+        println!("Student group: {group} for {student_id}.");
+    
+        Ok(reply::with_status(reply::json(&json!(group)), StatusCode::OK))
+    }    
 }
