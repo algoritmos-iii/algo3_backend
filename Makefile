@@ -28,5 +28,5 @@ test_get_queue:
 build_docker:
 	docker build -t algo3_backend .
 
-run_docker:
+run_docker: build_docker
 	docker run --rm -p ${FROM}:80 -d algo3_backend
