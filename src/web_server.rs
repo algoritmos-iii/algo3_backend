@@ -1,4 +1,7 @@
-use crate::{help_queue::HelpQueue, google_services::{SpreadsheetService, GoogleService, ServiceType}};
+use crate::{
+    google_services::{GoogleService, ServiceType, SpreadsheetService},
+    help_queue::HelpQueue,
+};
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -64,14 +67,19 @@ pub struct ServerArguments {
     domain: String,
     #[clap(short, long, value_parser, default_value_t = 80)]
     port: u16,
-    #[clap(short, long, value_parser, default_value = "1KmCLO5pJCVI6PWerRRZGLxFTFbX733QaxHonSlxxy8k")]
+    #[clap(
+        short,
+        long,
+        value_parser,
+        default_value = "1KmCLO5pJCVI6PWerRRZGLxFTFbX733QaxHonSlxxy8k"
+    )]
     spreadsheet_id: String,
 }
 
 impl Clone for ServerArguments {
     fn clone(&self) -> Self {
-        Self { 
-            domain: self.domain.clone(), 
+        Self {
+            domain: self.domain.clone(),
             port: self.port,
             spreadsheet_id: self.spreadsheet_id.clone(),
         }
@@ -136,13 +144,13 @@ impl WebServer {
         // Prepare the list of routes.
         tokio::spawn(async move {
             let spreadsheet_service = SpreadsheetService::new_reading_service_account_key(
-                    ServiceType::Spreadsheet,
-                    "v4",
-                    "./clientsecret.json",
-                    &["https://www.googleapis.com/auth/spreadsheets"],
-                )
-                .await
-                .unwrap();
+                ServiceType::Spreadsheet,
+                "v4",
+                "./clientsecret.json",
+                &["https://www.googleapis.com/auth/spreadsheets"],
+            )
+            .await
+            .unwrap();
             let routes = Self::routes(help_queue, spreadsheet_service, args.clone());
             // Start the server.
             println!("\n🌐 Server is running at {}:{}\n", args.domain, args.port);
@@ -190,7 +198,7 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "help_queue"))
             .and(with(help_queue))
             .and_then(Self::get_help_queue);
-        
+
         let is_student = warp::get()
             .and(warp::path!("api" / "discord" / "v1" / "is_student"))
             .and(warp::body::content_length_limit(10 * 1024 * 1024))
@@ -273,19 +281,22 @@ impl WebServer {
 
         let student_column_range = "B:E";
         let sheet_id = "Listado";
-    
+
         let spreadsheet_values = service
             .get_values(&spreadsheet_id, sheet_id, student_column_range)
             .await
             .or_reject()?;
-    
+
         let is_student = spreadsheet_values.values.into_iter().any(|mut row| {
             row.splice(1..3, vec![]);
             row.contains(&student_id.to_string()) && row.contains(&student_email)
         });
-    
-        Ok(reply::with_status(reply::json(&json!(is_student)), StatusCode::OK))
-    
+
+        Ok(reply::with_status(
+            reply::json(&json!(is_student)),
+            StatusCode::OK,
+        ))
+
         // TODO: Update "Está en Discord" column (K).
     }
 
@@ -296,18 +307,18 @@ impl WebServer {
     ) -> Result<impl Reply, Rejection> {
         let student_id = student_model.id;
         let student_email = student_model.email;
-    
+
         // TODO: validate student model fields.
-    
+
         println!("Finding group of: {student_id} {student_email}");
-    
+
         let spreadsheet_values = service
             .get_values(&spreadsheet_id, "Listado", "B:E")
             .await
             .or_reject()?;
-    
+
         println!("Spreadsheet retrieved successfully.");
-    
+
         let plausible_student = spreadsheet_values
             .values
             .into_iter()
@@ -316,21 +327,24 @@ impl WebServer {
                 row
             })
             .find(|row| row[0] == student_id.to_string() && row[2] == student_email);
-    
+
         let student = match plausible_student {
             Some(student) => student,
             None => return Err(reject::custom(ServerError::StudentNotFound)),
         };
-    
+
         println!("Student found.");
-    
+
         let group = match student[1].parse::<u8>() {
             Ok(group) => group,
             Err(_) => return Err(reject::custom(ServerError::StudentHasNoGroup)),
         };
-    
+
         println!("Student group: {group} for {student_id}.");
-    
-        Ok(reply::with_status(reply::json(&json!(group)), StatusCode::OK))
-    }    
+
+        Ok(reply::with_status(
+            reply::json(&json!(group)),
+            StatusCode::OK,
+        ))
+    }
 }

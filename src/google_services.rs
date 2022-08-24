@@ -1,7 +1,7 @@
 use anyhow::bail;
 use async_trait::async_trait;
 use reqwest::Response;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{path::Path, sync::Arc};
 
@@ -90,10 +90,7 @@ pub trait GoogleService {
         Ok(service)
     }
 
-    async fn spreadsheets(
-        &self,
-        _spreadsheet_id: &str,
-    ) -> Result<Spreadsheet, anyhow::Error> {
+    async fn spreadsheets(&self, _spreadsheet_id: &str) -> Result<Spreadsheet, anyhow::Error> {
         bail!("Not implemented")
     }
 
@@ -132,10 +129,7 @@ impl GoogleService for SpreadsheetService {
         }
     }
 
-    async fn spreadsheets(
-        &self,
-        spreadsheet_id: &str,
-    ) -> Result<Spreadsheet, anyhow::Error> {
+    async fn spreadsheets(&self, spreadsheet_id: &str) -> Result<Spreadsheet, anyhow::Error> {
         let mut header = reqwest::header::HeaderMap::new();
         header.insert(
             reqwest::header::AUTHORIZATION,
