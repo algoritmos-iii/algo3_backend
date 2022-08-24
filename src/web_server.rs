@@ -1,11 +1,11 @@
 use crate::help_queue::HelpQueue;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use clap::Parser;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use warp::{reject, reply, Filter, Rejection, Reply, hyper::StatusCode};
+use warp::{hyper::StatusCode, reject, reply, Filter, Rejection, Reply};
 
 #[derive(Serialize, Deserialize)]
 struct Requester {
@@ -39,7 +39,7 @@ impl<T> OrReject<T> for anyhow::Result<T> {
 pub enum HelpQueueRequest {
     Request((u16, u64)),
     Provide(String),
-    Dismiss(u16)
+    Dismiss(u16),
 }
 
 /// Arguments that serve as config for the server.
@@ -50,14 +50,13 @@ pub struct ServerArguments {
     domain: String,
     #[clap(short, long, value_parser, default_value_t = 8080)]
     port: u16,
-
 }
 
 impl Clone for ServerArguments {
     fn clone(&self) -> Self {
-        Self { 
-            domain: self.domain.clone(), 
-            port: self.port
+        Self {
+            domain: self.domain.clone(),
+            port: self.port,
         }
     }
 }
@@ -72,7 +71,9 @@ impl Default for ServerArguments {
 }
 
 /// A middleware to include the given item in the handler.
-fn with<T: Clone + Send>(item: T) -> impl Filter<Extract = (T,), Error = std::convert::Infallible> + Clone {
+fn with<T: Clone + Send>(
+    item: T,
+) -> impl Filter<Extract = (T,), Error = std::convert::Infallible> + Clone {
     warp::any().map(move || item.clone())
 }
 
@@ -93,10 +94,10 @@ impl WebServer {
             .enable_all()
             .thread_stack_size(8 * 1024 * 1024)
             .build()?;
-        
+
         let help_queue = match HelpQueue::new() {
             Ok(help_queue) => help_queue,
-            Err(error) => bail!(error.to_string())
+            Err(error) => bail!(error.to_string()),
         };
 
         let serve_args = args.clone();
@@ -105,7 +106,6 @@ impl WebServer {
         runtime.block_on(async move {
             let _ = Self::start_server(queue, serve_args).await;
         });
-
 
         Ok(Self {
             help_queue,
@@ -162,10 +162,9 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "help_queue"))
             .and(with(help_queue))
             .and_then(Self::get_help_queue);
-        
+
         // Return the list of routes.
-        next
-            .or(dismiss_help)
+        next.or(dismiss_help)
             .or(request_help)
             .or(clear_queue)
             .or(get_help_queue)
@@ -174,18 +173,33 @@ impl WebServer {
     /// Returns the next group in the help queue.
     async fn next(helper: String, help_queue: Arc<HelpQueue>) -> Result<impl Reply, Rejection> {
         let (group, voice_channel) = help_queue.next(helper).await.or_reject()?;
-        Ok(reply::with_status(reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})), StatusCode::OK))
+        Ok(reply::with_status(
+            reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})),
+            StatusCode::OK,
+        ))
     }
 
     /// Removes the dismisser from the help queue.
-    async fn dismiss_help(dismisser: u16, help_queue: Arc<HelpQueue>) -> Result<impl Reply, Rejection> {
+    async fn dismiss_help(
+        dismisser: u16,
+        help_queue: Arc<HelpQueue>,
+    ) -> Result<impl Reply, Rejection> {
         let (group, voice_channel) = help_queue.dismiss(dismisser).await.or_reject()?;
-        Ok(reply::with_status(reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})), StatusCode::OK))
+        Ok(reply::with_status(
+            reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})),
+            StatusCode::OK,
+        ))
     }
 
     /// Pushes a requester to the help queue.
-    async fn request_help(requester: Requester, help_queue: Arc<HelpQueue>) -> Result<impl Reply, Rejection> {
-        help_queue.enqueue(requester.group, requester.voice_channel).await.or_reject()?;
+    async fn request_help(
+        requester: Requester,
+        help_queue: Arc<HelpQueue>,
+    ) -> Result<impl Reply, Rejection> {
+        help_queue
+            .enqueue(requester.group, requester.voice_channel)
+            .await
+            .or_reject()?;
         Ok(reply::with_status(reply::reply(), StatusCode::OK))
     }
 
