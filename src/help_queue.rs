@@ -120,8 +120,8 @@ impl HelpQueue {
 mod help_queue_tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test01_help_queue_should_be_empty_when_created() {
+    #[test]
+    fn test01_help_queue_should_be_empty_when_created() {
         let queue = HelpQueue::new().expect("Error creating the help queue");
 
         assert!(queue.is_empty().is_ok());
