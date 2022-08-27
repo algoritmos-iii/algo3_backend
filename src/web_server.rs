@@ -64,7 +64,7 @@ impl Clone for ServerArguments {
 impl Default for ServerArguments {
     fn default() -> Self {
         Self {
-            domain: "localhost".to_string(),
+            domain: "http://127.0.0.1".to_string(),
             port: 8080,
         }
     }
