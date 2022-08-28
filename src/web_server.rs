@@ -71,7 +71,7 @@ pub struct ServerArguments {
         short,
         long,
         value_parser,
-        default_value = "1KmCLO5pJCVI6PWerRRZGLxFTFbX733QaxHonSlxxy8k"
+        default_value = "1jWXRFLamVmuAyTpv-n6737ze-8sgoAv1ZzHdyFXn4Rg"
     )]
     spreadsheet_id: String,
 }
