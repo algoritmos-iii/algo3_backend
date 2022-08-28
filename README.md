@@ -48,6 +48,8 @@ Todas las directivas de arriba tienen como opciones opcionales `DOMAIN` y `PORT`
 - `test_get_next` admite opcionalmente la opción `HELPER` para indicar el ayudante que brinda la ayuda. Por defecto es `Ayudante`.
 - `test_dismiss_help` admite opcionalmente la opción `GROUP` para indicar el grupo que desestima la ayuda. Por defecto es `0`.
 
+El loggeo de ayudas pueden verlo en [esta spreadsheet](https://docs.google.com/spreadsheets/d/145qVyafYthG1dfCjbz-VcoABRqTkyGszqWK03Ax0L8A/edit#gid=0) (acordate de borrar el log).
+
 ## Para correr los tests
 
 Para correr la suite de tests corré el siguiente comando en consola:
