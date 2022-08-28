@@ -261,6 +261,7 @@ mod tests {
     use crate::google_services::{GoogleService, ServiceType, SpreadsheetService};
 
     #[tokio::test]
+    #[ignore = "Hasta conseguir credenciales de prueba o en su defecto averiguar como usar las reales"]
     async fn test01_spreadsheet_append_row() {
         let spreadsheet_id = "1Ss7FMebxZxxGi15mREvQLYuBJ1sWVWbD".to_string();
 
