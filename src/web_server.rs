@@ -1,7 +1,4 @@
-use crate::{
-    google_services::{GoogleService, ServiceType, SpreadsheetService},
-    help_queue::HelpQueue,
-};
+use crate::{google_services::GoogleService, help_queue::HelpQueue};
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -51,6 +48,13 @@ impl<T> OrReject<T> for anyhow::Result<T> {
     }
 }
 
+impl<T> OrReject<T> for Option<T> {
+    /// Returns the result if it is successful, otherwise returns a rejection.
+    fn or_reject(self) -> Result<T, Rejection> {
+        self.ok_or_else(|| reject::custom(ServerError::Request("".to_string())))
+    }
+}
+
 /// An enum of requests that the `HelpQueue` struct processes.
 #[derive(Debug)]
 pub enum HelpQueueRequest {
@@ -81,6 +85,13 @@ pub struct ServerArguments {
         default_value = "1Ss7FMebxZxxGi15mREvQLYuBJ1sWVWbD"
     )]
     helpsheet_id: String,
+    #[clap(
+        short,
+        long,
+        value_parser,
+        default_value = "oeqsr7o5ftae7dav642rism2a4%40group.calendar.google.com"
+    )]
+    calendar_id: String,
 }
 
 impl Clone for ServerArguments {
@@ -90,6 +101,7 @@ impl Clone for ServerArguments {
             port: self.port,
             spreadsheet_id: self.spreadsheet_id.clone(),
             helpsheet_id: self.helpsheet_id.clone(),
+            calendar_id: self.calendar_id.clone(),
         }
     }
 }
@@ -101,6 +113,7 @@ impl Default for ServerArguments {
             port: 80,
             spreadsheet_id: "1jWXRFLamVmuAyTpv-n6737ze-8sgoAv1ZzHdyFXn4Rg".to_string(),
             helpsheet_id: "1Ss7FMebxZxxGi15mREvQLYuBJ1sWVWbD".to_string(),
+            calendar_id: "oeqsr7o5ftae7dav642rism2a4%40group.calendar.google.com".to_string(),
         }
     }
 }
@@ -152,15 +165,16 @@ impl WebServer {
     fn start_server(help_queue: Arc<HelpQueue>, args: ServerArguments) -> JoinHandle<()> {
         // Prepare the list of routes.
         tokio::spawn(async move {
-            let spreadsheet_service = SpreadsheetService::new_reading_service_account_key(
-                ServiceType::Spreadsheet,
-                "v4",
+            let google_service = GoogleService::new_reading_service_account_key(
                 "./clientsecret.json",
-                &["https://www.googleapis.com/auth/spreadsheets"],
+                &[
+                    "https://www.googleapis.com/auth/spreadsheets",
+                    "https://www.googleapis.com/auth/calendar.events.readonly",
+                ],
             )
             .await
             .unwrap();
-            let routes = Self::routes(help_queue, spreadsheet_service, args.clone());
+            let routes = Self::routes(help_queue, google_service, args.clone());
             // Start the server.
             println!("\n🌐 Server is running at {}:{}\n", args.domain, args.port);
             warp::serve(routes).run(([0, 0, 0, 0], args.port)).await;
@@ -169,7 +183,7 @@ impl WebServer {
 
     fn routes(
         help_queue: Arc<HelpQueue>,
-        spreadsheet_service: Arc<SpreadsheetService>,
+        google_service: Arc<GoogleService>,
         args: ServerArguments,
     ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
         // GET /api/discord/v1/next
@@ -177,7 +191,7 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "next"))
             .and(warp::body::content_length_limit(64))
             .and(warp::body::json())
-            .and(with(spreadsheet_service.clone()))
+            .and(with(google_service.clone()))
             .and(with(args.helpsheet_id.clone()))
             .and(with(help_queue.clone()))
             .and_then(Self::next);
@@ -187,7 +201,7 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "dismiss_help"))
             .and(warp::body::content_length_limit(2))
             .and(warp::body::json())
-            .and(with(spreadsheet_service.clone()))
+            .and(with(google_service.clone()))
             .and(with(args.helpsheet_id.clone()))
             .and(with(help_queue.clone()))
             .and_then(Self::dismiss_help);
@@ -216,7 +230,7 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "is_student"))
             .and(warp::body::content_length_limit(10 * 1024 * 1024))
             .and(warp::body::json())
-            .and(with(spreadsheet_service.clone()))
+            .and(with(google_service.clone()))
             .and(with(args.spreadsheet_id.clone()))
             .and_then(Self::is_student);
 
@@ -224,9 +238,15 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "group"))
             .and(warp::body::content_length_limit(10 * 1024 * 1024))
             .and(warp::body::json())
-            .and(with(spreadsheet_service))
+            .and(with(google_service.clone()))
             .and(with(args.spreadsheet_id))
             .and_then(Self::find_group);
+
+        let next_event = warp::get()
+            .and(warp::path!("api" / "discord" / "v1" / "next_class"))
+            .and(with(google_service))
+            .and(with(args.calendar_id))
+            .and_then(Self::next_event);
 
         // Return the list of routes.
         next.or(dismiss_help)
@@ -235,24 +255,18 @@ impl WebServer {
             .or(get_help_queue)
             .or(is_student)
             .or(get_group)
+            .or(next_event)
     }
 
     /// Returns the next group in the help queue.
     async fn next(
         helper: String,
-        spreadsheet_service: Arc<SpreadsheetService>,
+        google_service: Arc<GoogleService>,
         helpsheet_id: String,
         help_queue: Arc<HelpQueue>,
     ) -> Result<impl Reply, Rejection> {
         let (group, voice_channel) = help_queue.next(&helper).await.or_reject()?;
-        Self::log_help(
-            group,
-            "Brindada",
-            &helper,
-            spreadsheet_service,
-            helpsheet_id,
-        )
-        .await?;
+        Self::log_help(group, "Brindada", &helper, google_service, helpsheet_id).await?;
         Ok(reply::with_status(
             reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})),
             StatusCode::OK,
@@ -262,12 +276,12 @@ impl WebServer {
     /// Removes the dismisser from the help queue.
     async fn dismiss_help(
         dismisser: u16,
-        spreadsheet_service: Arc<SpreadsheetService>,
+        google_service: Arc<GoogleService>,
         helpsheet_id: String,
         help_queue: Arc<HelpQueue>,
     ) -> Result<impl Reply, Rejection> {
         let (group, voice_channel) = help_queue.dismiss(dismisser).await.or_reject()?;
-        Self::log_help(group, "Desestimada", "-", spreadsheet_service, helpsheet_id).await?;
+        Self::log_help(group, "Desestimada", "-", google_service, helpsheet_id).await?;
         Ok(reply::with_status(
             reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})),
             StatusCode::OK,
@@ -300,7 +314,7 @@ impl WebServer {
 
     async fn is_student(
         student_model: Student,
-        service: Arc<SpreadsheetService>,
+        service: Arc<GoogleService>,
         spreadsheet_id: String,
     ) -> Result<impl Reply, Rejection> {
         let student_id = student_model.id;
@@ -331,7 +345,7 @@ impl WebServer {
 
     pub async fn find_group(
         student_model: Student,
-        service: Arc<SpreadsheetService>,
+        service: Arc<GoogleService>,
         spreadsheet_id: String,
     ) -> Result<impl Reply, Rejection> {
         let student_id = student_model.id;
@@ -381,7 +395,7 @@ impl WebServer {
         group: u16,
         resolution: &str,
         helper: &str,
-        service: Arc<SpreadsheetService>,
+        service: Arc<GoogleService>,
         helpsheet_id: String,
     ) -> Result<impl Reply, Rejection> {
         println!("Logging help");
@@ -406,5 +420,14 @@ impl WebServer {
             }
             Err(_) => Err(reject::not_found()),
         }
+    }
+
+    async fn next_event(
+        google_service: Arc<GoogleService>,
+        calendar_id: String,
+    ) -> Result<impl Reply, Rejection> {
+        let events = google_service.events(calendar_id).await.or_reject()?;
+        let next_event = events.first().or_reject()?;
+        Ok(reply::with_status(reply::json(next_event), StatusCode::OK))
     }
 }
