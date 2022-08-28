@@ -39,7 +39,7 @@ impl HelpQueue {
     }
 
     /// Returns the next group in the help queue.
-    pub async fn next(&self, helper: String) -> Result<(Group, VoiceChannel)> {
+    pub async fn next(&self, helper: &str) -> Result<(Group, VoiceChannel)> {
         let next = match self.queue.read() {
             Ok(queue) => {
                 let aux_queue = queue.clone();
@@ -151,7 +151,7 @@ mod help_queue_tests {
             .await
             .expect("Error enqueueing help");
 
-        let expected_result = queue.next("Ivan".to_string()).await;
+        let expected_result = queue.next("Ivan").await;
 
         if let Ok((group, voice_channel)) = expected_result {
             assert_eq!(queue.len().unwrap(), 0);
@@ -187,8 +187,8 @@ mod help_queue_tests {
             .await
             .expect("Error enqueueing help");
 
-        let expected_result = queue.next("Ivan".to_string()).await;
-        let other_expected_result = queue.next("Ivan".to_string()).await;
+        let expected_result = queue.next("Ivan").await;
+        let other_expected_result = queue.next("Ivan").await;
 
         assert_eq!(queue.len().unwrap(), 0);
         if let Ok((group, voice_channel)) = expected_result {
@@ -219,7 +219,7 @@ mod help_queue_tests {
     async fn test07_there_is_no_next_in_an_empty_queue() {
         let queue = HelpQueue::new().expect("Error creating the help queue");
 
-        let expected_result = queue.next("Ivan".to_string()).await;
+        let expected_result = queue.next("Ivan").await;
 
         assert!(expected_result.is_err());
     }
