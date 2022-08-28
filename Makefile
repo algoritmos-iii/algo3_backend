@@ -6,9 +6,10 @@ FROM?=${PORT}
 PADRON?=106223
 EMAIL?=ilitteri@fi.uba.ar
 SPREADSHEET_ID?=1KmCLO5pJCVI6PWerRRZGLxFTFbX733QaxHonSlxxy8k
+HELPSHEET_ID?=145qVyafYthG1dfCjbz-VcoABRqTkyGszqWK03Ax0L8A
 
 run:
-	cargo run --release -- --domain=${DOMAIN} --port=${PORT} --spreadsheet-id=${SPREADSHEET_ID}
+	cargo run --release -- --domain=${DOMAIN} --port=${PORT} --spreadsheet-id=${SPREADSHEET_ID} --helpsheet-id=${HELPSHEET_ID}
 
 test:
 	cargo test
