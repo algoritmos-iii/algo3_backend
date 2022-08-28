@@ -74,6 +74,13 @@ pub struct ServerArguments {
         default_value = "1jWXRFLamVmuAyTpv-n6737ze-8sgoAv1ZzHdyFXn4Rg"
     )]
     spreadsheet_id: String,
+    #[clap(
+        short,
+        long,
+        value_parser,
+        default_value = "1Ss7FMebxZxxGi15mREvQLYuBJ1sWVWbD"
+    )]
+    helpsheet_id: String,
 }
 
 impl Clone for ServerArguments {
@@ -82,6 +89,7 @@ impl Clone for ServerArguments {
             domain: self.domain.clone(),
             port: self.port,
             spreadsheet_id: self.spreadsheet_id.clone(),
+            helpsheet_id: self.helpsheet_id.clone(),
         }
     }
 }
@@ -91,7 +99,8 @@ impl Default for ServerArguments {
         Self {
             domain: "http://0.0.0.0".to_string(),
             port: 80,
-            spreadsheet_id: "1KmCLO5pJCVI6PWerRRZGLxFTFbX733QaxHonSlxxy8k".to_string(),
+            spreadsheet_id: "1jWXRFLamVmuAyTpv-n6737ze-8sgoAv1ZzHdyFXn4Rg".to_string(),
+            helpsheet_id: "1Ss7FMebxZxxGi15mREvQLYuBJ1sWVWbD".to_string(),
         }
     }
 }
@@ -168,6 +177,8 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "next"))
             .and(warp::body::content_length_limit(64))
             .and(warp::body::json())
+            .and(with(spreadsheet_service.clone()))
+            .and(with(args.helpsheet_id.clone()))
             .and(with(help_queue.clone()))
             .and_then(Self::next);
 
@@ -176,6 +187,8 @@ impl WebServer {
             .and(warp::path!("api" / "discord" / "v1" / "dismiss_help"))
             .and(warp::body::content_length_limit(2))
             .and(warp::body::json())
+            .and(with(spreadsheet_service.clone()))
+            .and(with(args.helpsheet_id.clone()))
             .and(with(help_queue.clone()))
             .and_then(Self::dismiss_help);
 
@@ -225,8 +238,21 @@ impl WebServer {
     }
 
     /// Returns the next group in the help queue.
-    async fn next(helper: String, help_queue: Arc<HelpQueue>) -> Result<impl Reply, Rejection> {
-        let (group, voice_channel) = help_queue.next(helper).await.or_reject()?;
+    async fn next(
+        helper: String,
+        spreadsheet_service: Arc<SpreadsheetService>,
+        helpsheet_id: String,
+        help_queue: Arc<HelpQueue>,
+    ) -> Result<impl Reply, Rejection> {
+        let (group, voice_channel) = help_queue.next(&helper).await.or_reject()?;
+        Self::log_help(
+            group,
+            "Brindada",
+            &helper,
+            spreadsheet_service,
+            helpsheet_id,
+        )
+        .await?;
         Ok(reply::with_status(
             reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})),
             StatusCode::OK,
@@ -236,9 +262,12 @@ impl WebServer {
     /// Removes the dismisser from the help queue.
     async fn dismiss_help(
         dismisser: u16,
+        spreadsheet_service: Arc<SpreadsheetService>,
+        helpsheet_id: String,
         help_queue: Arc<HelpQueue>,
     ) -> Result<impl Reply, Rejection> {
         let (group, voice_channel) = help_queue.dismiss(dismisser).await.or_reject()?;
+        Self::log_help(group, "Desestimada", "-", spreadsheet_service, helpsheet_id).await?;
         Ok(reply::with_status(
             reply::json(&serde_json::json!({"group": group, "voice_channel": voice_channel})),
             StatusCode::OK,
@@ -346,5 +375,36 @@ impl WebServer {
             reply::json(&json!(group)),
             StatusCode::OK,
         ))
+    }
+
+    pub async fn log_help(
+        group: u16,
+        resolution: &str,
+        helper: &str,
+        service: Arc<SpreadsheetService>,
+        helpsheet_id: String,
+    ) -> Result<impl Reply, Rejection> {
+        println!("Logging help");
+
+        let iso_date = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let sheet_id = "Ayudas";
+        let plausible_response = service
+            .append_row(
+                &helpsheet_id,
+                sheet_id,
+                vec![&iso_date, &group.to_string(), resolution, helper],
+            )
+            .await;
+
+        match plausible_response {
+            Ok(response) => {
+                println!("Help logged");
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&response.json::<serde_json::Value>().await.unwrap()),
+                    warp::http::StatusCode::OK,
+                ))
+            }
+            Err(_) => Err(reject::not_found()),
+        }
     }
 }
