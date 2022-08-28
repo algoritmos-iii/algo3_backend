@@ -255,3 +255,40 @@ impl Clone for SpreadsheetService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::google_services::{GoogleService, ServiceType, SpreadsheetService};
+
+    #[tokio::test]
+    async fn test01_spreadsheet_append_row() {
+        let spreadsheet_id = "1Ss7FMebxZxxGi15mREvQLYuBJ1sWVWbD".to_string();
+
+        let service = SpreadsheetService::new_reading_service_account_key(
+            ServiceType::Spreadsheet,
+            "v4",
+            "./clientsecret.json",
+            &["https://www.googleapis.com/auth/spreadsheets"],
+        )
+        .await
+        .unwrap();
+
+        let expected_result = service
+            .append_row(
+                &spreadsheet_id,
+                "Test",
+                vec![
+                    &chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                    "0",
+                    "Brindada",
+                    "Yo",
+                ],
+            )
+            .await;
+
+        println!("{:?}", expected_result);
+
+        assert!(expected_result.is_ok());
+        assert!(expected_result.unwrap().status().is_success());
+    }
+}
