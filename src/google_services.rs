@@ -58,6 +58,8 @@ impl<'de> Deserialize<'de> for Events {
 }
 #[derive(Serialize, Debug, Clone)]
 pub struct Event {
+    summary: String,
+    description: String,
     start_date_time: String,
     end_date_time: String,
     time_zone: String,
@@ -71,6 +73,10 @@ impl<'de> Deserialize<'de> for Event {
         let request = serde_json::Value::deserialize(deserializer)?;
 
         Ok(Self {
+            summary: serde_json::from_value(request["summary"].clone())
+                .map_err(de::Error::custom)?,
+            description: serde_json::from_value(request["description"].clone())
+                .map_err(de::Error::custom)?,
             start_date_time: serde_json::from_value(request["start"]["dateTime"].clone())
                 .map_err(de::Error::custom)?,
             end_date_time: serde_json::from_value(request["end"]["dateTime"].clone())
