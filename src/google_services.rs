@@ -25,12 +25,22 @@ struct GeneralSheet {
     conditional_formats: Option<Vec<serde_json::Value>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize, Debug)]
 pub struct SpreadsheetValue {
-    range: String,
-    major_dimension: String,
     pub values: Vec<Vec<String>>,
+}
+
+impl<'de> Deserialize<'de> for SpreadsheetValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let request = serde_json::Value::deserialize(deserializer)?;
+
+        Ok(Self {
+            values: serde_json::from_value(request["values"].clone()).map_err(de::Error::custom)?,
+        })
+    }
 }
 
 #[derive(Serialize, Debug)]
