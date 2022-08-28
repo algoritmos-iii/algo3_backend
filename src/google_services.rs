@@ -4,27 +4,6 @@ use serde::{de, Deserialize, Serialize};
 use serde_json::json;
 use std::{path::Path, sync::Arc};
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct Spreadsheet {
-    spreadsheet_id: String,
-    properties: serde_json::Value, //SpreadsheetProperties,
-    sheets: Vec<GeneralSheet>,
-    // named_ranges: Vec<serde_json::Value>, // Vec<NamedRange>,
-    spreadsheet_url: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct GeneralSheet {
-    properties: serde_json::Value,
-    merges: Option<Vec<serde_json::Value>>,
-    filter_views: Option<Vec<serde_json::Value>>,
-    basic_filter: Option<serde_json::Value>,
-    banded_ranges: Option<Vec<serde_json::Value>>,
-    conditional_formats: Option<Vec<serde_json::Value>>,
-}
-
 #[derive(Serialize, Debug)]
 pub struct SpreadsheetValue {
     pub values: Vec<Vec<String>>,
@@ -158,42 +137,6 @@ impl GoogleService {
             reqwest::Client::new(),
             auth_token.as_str().to_string(),
         )))
-    }
-
-    pub async fn spreadsheets(&self, spreadsheet_id: &str) -> Result<Spreadsheet, anyhow::Error> {
-        let mut header = reqwest::header::HeaderMap::new();
-        header.insert(
-            reqwest::header::AUTHORIZATION,
-            reqwest::header::HeaderValue::from_str(
-                format!("Bearer {}", self.access_token.as_str()).as_str(),
-            )
-            .unwrap(),
-        );
-        header.insert(
-            reqwest::header::ACCEPT,
-            reqwest::header::HeaderValue::from_static("application/json"),
-        );
-        let request = match self
-            .client
-            .get(format!(
-                "{}/spreadsheets/{spreadsheet_id}",
-                self.spreadsheet_url
-            ))
-            .headers(header)
-            .build()
-        {
-            Ok(request) => request,
-            Err(e) => bail!("{e}"),
-        };
-        let response = match self.client.execute(request).await {
-            Ok(response) => response,
-            Err(e) => bail!("{e}"),
-        };
-        let spreadsheet = match response.json::<Spreadsheet>().await {
-            Ok(spreadsheet) => spreadsheet,
-            Err(e) => bail!("{e}"),
-        };
-        Ok(spreadsheet)
     }
 
     pub async fn append_row(
