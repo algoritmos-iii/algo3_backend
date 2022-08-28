@@ -1,7 +1,6 @@
 use anyhow::bail;
-use async_trait::async_trait;
 use reqwest::Response;
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use serde_json::json;
 use std::{path::Path, sync::Arc};
 
@@ -34,14 +33,77 @@ pub struct SpreadsheetValue {
     pub values: Vec<Vec<String>>,
 }
 
-pub enum ServiceType {
-    Spreadsheet,
-    Calendar,
+#[derive(Serialize, Debug)]
+pub struct Events {
+    events: Vec<Event>,
 }
 
-#[async_trait]
-pub trait GoogleService {
-    fn new_service(client: reqwest::Client, access_token: String, url: String) -> Self;
+impl Events {
+    pub fn first(&self) -> Option<&Event> {
+        self.events.first()
+    }
+}
+
+impl<'de> Deserialize<'de> for Events {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let request = serde_json::Value::deserialize(deserializer)?;
+
+        Ok(Self {
+            events: serde_json::from_value(request["items"].clone()).map_err(de::Error::custom)?,
+        })
+    }
+}
+#[derive(Serialize, Debug, Clone)]
+pub struct Event {
+    start_date_time: String,
+    end_date_time: String,
+    time_zone: String,
+}
+
+impl<'de> Deserialize<'de> for Event {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let request = serde_json::Value::deserialize(deserializer)?;
+
+        Ok(Self {
+            start_date_time: serde_json::from_value(request["start"]["dateTime"].clone())
+                .map_err(de::Error::custom)?,
+            end_date_time: serde_json::from_value(request["end"]["dateTime"].clone())
+                .map_err(de::Error::custom)?,
+            time_zone: serde_json::from_value(request["end"]["timeZone"].clone())
+                .map_err(de::Error::custom)?,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarDate {
+    pub date_time: String,
+    pub time_zone: String,
+}
+
+pub struct GoogleService {
+    client: reqwest::Client,
+    access_token: String,
+    spreadsheet_url: String,
+    calendar_url: String,
+}
+
+impl GoogleService {
+    fn new_service(client: reqwest::Client, access_token: String) -> Self {
+        Self {
+            client,
+            access_token,
+            spreadsheet_url: "https://sheets.googleapis.com/v4".to_string(),
+            calendar_url: "https://www.googleapis.com/calendar/v3".to_string(),
+        }
+    }
 
     async fn auth_token<P>(
         path: P,
@@ -64,12 +126,10 @@ pub trait GoogleService {
         auth.token(scopes).await
     }
 
-    async fn new_reading_service_account_key<P>(
-        service_type: ServiceType,
-        version: &str,
+    pub async fn new_reading_service_account_key<P>(
         path: P,
         scopes: &[&str],
-    ) -> Result<Arc<SpreadsheetService>, anyhow::Error>
+    ) -> Result<Arc<Self>, anyhow::Error>
     where
         P: AsRef<Path> + Send,
     {
@@ -78,58 +138,13 @@ pub trait GoogleService {
             Err(e) => bail!("{}", e),
         };
 
-        let service = match service_type {
-            ServiceType::Spreadsheet => Arc::new(SpreadsheetService::new_service(
-                reqwest::Client::new(),
-                auth_token.as_str().to_string(),
-                format!("https://sheets.googleapis.com/{version}"),
-            )),
-            _ => bail!("Unknown API"),
-        };
-
-        Ok(service)
+        Ok(Arc::new(Self::new_service(
+            reqwest::Client::new(),
+            auth_token.as_str().to_string(),
+        )))
     }
 
-    async fn spreadsheets(&self, _spreadsheet_id: &str) -> Result<Spreadsheet, anyhow::Error> {
-        bail!("Not implemented")
-    }
-
-    async fn append_row(
-        &self,
-        _spreadsheet_id: &str,
-        _sheet_id: &str,
-        _values: Vec<&str>,
-    ) -> Result<Response, anyhow::Error> {
-        bail!("Not implemented")
-    }
-
-    async fn get_values(
-        &self,
-        _spreadsheet_id: &str,
-        _sheet_id: &str,
-        _range: &str,
-    ) -> Result<SpreadsheetValue, anyhow::Error> {
-        bail!("Not implemented")
-    }
-}
-
-pub struct SpreadsheetService {
-    client: reqwest::Client,
-    access_token: String,
-    url: String,
-}
-
-#[async_trait]
-impl GoogleService for SpreadsheetService {
-    fn new_service(client: reqwest::Client, access_token: String, url: String) -> Self {
-        SpreadsheetService {
-            client,
-            access_token,
-            url,
-        }
-    }
-
-    async fn spreadsheets(&self, spreadsheet_id: &str) -> Result<Spreadsheet, anyhow::Error> {
+    pub async fn spreadsheets(&self, spreadsheet_id: &str) -> Result<Spreadsheet, anyhow::Error> {
         let mut header = reqwest::header::HeaderMap::new();
         header.insert(
             reqwest::header::AUTHORIZATION,
@@ -144,7 +159,10 @@ impl GoogleService for SpreadsheetService {
         );
         let request = match self
             .client
-            .get(format!("{}/spreadsheets/{spreadsheet_id}", self.url))
+            .get(format!(
+                "{}/spreadsheets/{spreadsheet_id}",
+                self.spreadsheet_url
+            ))
             .headers(header)
             .build()
         {
@@ -162,7 +180,7 @@ impl GoogleService for SpreadsheetService {
         Ok(spreadsheet)
     }
 
-    async fn append_row(
+    pub async fn append_row(
         &self,
         spreadsheet_id: &str,
         sheet_id: &str,
@@ -184,7 +202,7 @@ impl GoogleService for SpreadsheetService {
 
         let request = match self
             .client
-            .post(format!("{}/spreadsheets/{spreadsheet_id}/values/{sheet_id}:append?insertDataOption=INSERT_ROWS&valueInputOption=USER_ENTERED", self.url))
+            .post(format!("{}/spreadsheets/{spreadsheet_id}/values/{sheet_id}:append?insertDataOption=INSERT_ROWS&valueInputOption=USER_ENTERED", self.spreadsheet_url))
             .headers(header)
             .json(data)
             .build()
@@ -197,10 +215,11 @@ impl GoogleService for SpreadsheetService {
             Ok(response) => response,
             Err(e) => bail!("{e}"),
         };
+
         Ok(response)
     }
 
-    async fn get_values(
+    pub async fn get_values(
         &self,
         spreadsheet_id: &str,
         sheet_id: &str,
@@ -223,7 +242,7 @@ impl GoogleService for SpreadsheetService {
             .client
             .get(format!(
                 "{}/spreadsheets/{spreadsheet_id}/values/{sheet_id}!{range}",
-                self.url
+                self.spreadsheet_url
             ))
             .headers(header)
             .build()
@@ -244,32 +263,74 @@ impl GoogleService for SpreadsheetService {
 
         Ok(spreadsheet_values)
     }
+
+    pub async fn events(&self, calendar_id: String) -> Result<Events, anyhow::Error> {
+        let mut header = reqwest::header::HeaderMap::new();
+        header.insert(
+            reqwest::header::AUTHORIZATION,
+            reqwest::header::HeaderValue::from_str(
+                format!("Bearer {}", self.access_token.as_str()).as_str(),
+            )
+            .unwrap(),
+        );
+        header.insert(
+            reqwest::header::ACCEPT,
+            reqwest::header::HeaderValue::from_static("application/json"),
+        );
+
+        let request = match self
+            .client
+            .get(format!(
+                "{}/calendars/{calendar_id}/events",
+                self.calendar_url
+            ))
+            .headers(header)
+            .build()
+        {
+            Ok(request) => request,
+            Err(e) => bail!("Error building the request: {e}"),
+        };
+
+        let response = match self.client.execute(request).await {
+            Ok(response) => response,
+            Err(e) => bail!("Error executing the request: {e}"),
+        };
+
+        let events = match response.json::<Events>().await {
+            Ok(events) => events,
+            Err(e) => bail!("{e}"),
+        };
+
+        Ok(events)
+    }
 }
 
-impl Clone for SpreadsheetService {
+impl Clone for GoogleService {
     fn clone(&self) -> Self {
-        SpreadsheetService {
+        Self {
             client: self.client.clone(),
             access_token: self.access_token.clone(),
-            url: self.url.clone(),
+            spreadsheet_url: self.spreadsheet_url.clone(),
+            calendar_url: self.calendar_url.clone(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::google_services::{GoogleService, ServiceType, SpreadsheetService};
+    use crate::google_services::GoogleService;
 
     #[tokio::test]
     #[ignore = "Hasta conseguir credenciales de prueba o en su defecto averiguar como usar las reales"]
     async fn test01_spreadsheet_append_row() {
         let spreadsheet_id = "1Ss7FMebxZxxGi15mREvQLYuBJ1sWVWbD".to_string();
 
-        let service = SpreadsheetService::new_reading_service_account_key(
-            ServiceType::Spreadsheet,
-            "v4",
+        let service = GoogleService::new_reading_service_account_key(
             "./clientsecret.json",
-            &["https://www.googleapis.com/auth/spreadsheets"],
+            &[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/calendar.events.readonly",
+            ],
         )
         .await
         .unwrap();
