@@ -2,6 +2,7 @@ use crate::help_queue::HelpQueue;
 
 use anyhow::{bail, Result};
 use clap::Parser;
+use select::{document::Document, predicate::Name};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -11,6 +12,12 @@ use warp::{hyper::StatusCode, reject, reply, Filter, Rejection, Reply};
 struct Requester {
     group: u16,
     voice_channel: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Papers {
+    name: String,
+    url: String,
 }
 
 /// An enum of error handlers for the server.
@@ -163,11 +170,17 @@ impl WebServer {
             .and(with(help_queue))
             .and_then(Self::get_help_queue);
 
+        // GET /api/discord/v1/papers
+        let get_papers = warp::get()
+            .and(warp::path!("api" / "discord" / "v1" / "papers"))
+            .and_then(Self::get_papers);
+
         // Return the list of routes.
         next.or(dismiss_help)
             .or(request_help)
             .or(clear_queue)
             .or(get_help_queue)
+            .or(get_papers)
     }
 
     /// Returns the next group in the help queue.
@@ -213,5 +226,44 @@ impl WebServer {
     async fn get_help_queue(help_queue: Arc<HelpQueue>) -> Result<impl Reply, Rejection> {
         let queue: Vec<u16> = help_queue.sorted().or_reject()?.collect();
         Ok(reply::with_status(reply::json(&queue), StatusCode::OK))
+    }
+    /// Create papers.json
+    async fn get_papers() -> Result<impl Reply, Rejection> {
+        let body = reqwest::get("https://github.com/algoritmos-iii/algoritmos-iii.github.io/tree/master/assets/bibliografia")
+            .await.map_err(|e| reject::custom(ServerError::Request(e.to_string())))?
+            .text()
+            .await.map_err(|e| reject::custom(ServerError::Request(e.to_string())))?;
+
+        let papers: Vec<Papers> = Document::from(body.as_str())
+            .find(Name("a"))
+            .filter_map(|n| n.attr("href"))
+            .filter(|link| {
+                link.starts_with(
+                    "/algoritmos-iii/algoritmos-iii.github.io/blob/master/assets/bibliografia/",
+                )
+            })
+            .map(|paper_url_github| {
+                let paper_name = paper_url_github
+                    .split(&['/', '.'][..])
+                    .collect::<Vec<&str>>()[9]
+                    .to_string();
+
+                let mut paper_url_to_modify =
+                    paper_url_github.split_inclusive('/').collect::<Vec<&str>>();
+                paper_url_to_modify.remove(4);
+                paper_url_to_modify.remove(3);
+                paper_url_to_modify.remove(1);
+                paper_url_to_modify.remove(0);
+                paper_url_to_modify.insert(0, "https://");
+                let paper_url_string = paper_url_to_modify.concat();
+
+                Papers {
+                    name: paper_name,
+                    url: paper_url_string,
+                }
+            })
+            .collect();
+
+        Ok(reply::with_status(reply::json(&papers), StatusCode::OK))
     }
 }
