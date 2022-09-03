@@ -23,3 +23,6 @@ test_clear:
 
 test_get_queue:
 	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/help_queue"
+
+test_get_papers:
+	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/papers"
