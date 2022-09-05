@@ -2,6 +2,7 @@ DOMAIN?=localhost
 PORT?=8080
 GROUP?=0
 HELPER?=Ayudante
+FROM?=${PORT}
 
 run:
 	cargo run --release -- --port=${PORT}
@@ -23,3 +24,9 @@ test_clear:
 
 test_get_queue:
 	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/help_queue"
+
+build_docker:
+	docker build -t algo3_backend .
+
+run_docker: build_docker
+	docker run --rm -p ${FROM}:80 -d algo3_backend

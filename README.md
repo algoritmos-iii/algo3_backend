@@ -12,7 +12,15 @@ source "$HOME/.cargo/env"
 
 ## Build and Run
 
-Ejecutar el siguiente comando compilará y ejecutará el binario que estará escuchando requests en el puerto `8080` en `localhost` por default.
+Ejecutar el siguiente comando compilará y ejecutará el binario que estará escuchando requests en el puerto `8080` en `localhost` por default (en un Docker Container).
+
+```bash
+make run_docker
+```
+
+La segunda directiva admite la opción `FROM` que por defecto es `8080` y representa al port que al que se hace forwarding.
+
+Ejecutar el siguiente comando compilará y ejecutará el binario que estará escuchando requests en el puerto `8080` en `localhost` por default (localmente).
 
 ```bash
 make run
