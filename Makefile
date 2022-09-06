@@ -3,9 +3,14 @@ PORT?=8080
 GROUP?=0
 HELPER?=Ayudante
 FROM?=${PORT}
+PADRON?=106223
+EMAIL?=ilitteri@fi.uba.ar
+SPREADSHEET_ID?=1jWXRFLamVmuAyTpv-n6737ze-8sgoAv1ZzHdyFXn4Rg
+HELPSHEET_ID?=145qVyafYthG1dfCjbz-VcoABRqTkyGszqWK03Ax0L8A
+CALENDAR_ID?=oeqsr7o5ftae7dav642rism2a4%40group.calendar.google.com
 
 run:
-	cargo run --release -- --port=${PORT}
+	cargo run --release -- --domain=${DOMAIN} --port=${PORT} --spreadsheet-id=${SPREADSHEET_ID} --helpsheet-id=${HELPSHEET_ID}
 
 test:
 	cargo test
@@ -24,6 +29,15 @@ test_clear:
 
 test_get_queue:
 	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/help_queue"
+
+test_is_student:
+	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/is_student" -H "Content-Type: application/json" -d '{"id": ${PADRON}, "email": "${EMAIL}"}'
+
+test_get_group:
+	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/group" -H "Content-Type: application/json" -d '{"id": ${PADRON}, "email": "${EMAIL}"}'
+
+test_get_next_class:
+	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/next_class"
 
 build_docker:
 	docker build -t algo3_backend .

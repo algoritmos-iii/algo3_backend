@@ -1,13 +1,10 @@
 # STAGE 1
 FROM rust:alpine3.15 AS builder
-
 # Install dependencies
 RUN apk add musl-dev --no-cache
-
 # Copy source code.
 COPY src /src
 COPY Cargo.toml Cargo.lock /
-
 # Build rust binaries.
 RUN cargo build --release --manifest-path /Cargo.toml
 
