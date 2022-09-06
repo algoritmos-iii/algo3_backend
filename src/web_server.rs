@@ -197,7 +197,7 @@ impl WebServer {
             .and_then(Self::next);
 
         // POST /api/discord/v1/dismiss_help
-        let dismiss_help = warp::get()
+        let dismiss_help = warp::post()
             .and(warp::path!("api" / "discord" / "v1" / "dismiss_help"))
             .and(warp::body::content_length_limit(2))
             .and(warp::body::json())

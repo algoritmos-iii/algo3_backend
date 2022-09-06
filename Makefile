@@ -22,7 +22,7 @@ test_get_next:
 	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/next" -H 'Content-Type: application/json' -d '"${HELPER}"'
 
 test_dismiss:
-	curl --location --request GET "${DOMAIN}:${PORT}/api/discord/v1/dismiss_help" -H 'Content-Type: application/json' -d '${GROUP}'
+	curl --location --request POST "${DOMAIN}:${PORT}/api/discord/v1/dismiss_help" -H 'Content-Type: application/json' -d '${GROUP}'
 
 test_clear:
 	curl --location --request PATCH "${DOMAIN}:${PORT}/api/discord/v1/clear_help_queue"
